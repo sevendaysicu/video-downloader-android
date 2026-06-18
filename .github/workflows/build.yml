@@ -8,7 +8,7 @@ jobs:
       - name: 1. 拉取仓库代码
         uses: actions/checkout@v4
 
-      - name: 2. 安装并配置 Java 环境
+      - name: 2. 安装并配置 Java 环境 (Android 编译必备)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -19,57 +19,35 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 4. 安装 Linux 系统底层打包依赖
+      - name: 4. 安装 Linux 系统底层编译依赖
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential ccache git zlib1g-dev libffi-dev libssl-dev libncurses5-dev libgdbm-dev libnss3-dev libsqlite3-dev libreadline-dev tk-dev libgmp-dev libmpfr-dev libmpc-dev libasound2-dev patchelf unzip
           sudo apt-get install -y lib32stdc++6 lib32z1
 
-      - name: 5. 安装 2026 标准 Buildozer 环境
+      - name: 5. 安装 Buildozer 核心打包工具
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade virtualenv buildozer sh Cython
 
-      - name: 6. 诱骗 Buildozer 自动初始化双重空路径
+      - name: 6. 纯净初始化并一键全自动编译 (不再使用任何多余脚本)
         run: |
-          # 让 Buildozer 后台运行 15 秒，逼迫它在所有可能的地方把两个隐藏目录都建好
-          buildozer android debug > /dev/null 2>&1 &
-          sleep 15
-          pkill -f buildozer || true
-          pkill -f python || true
-
-      - name: 7. 对「全局用户目录」和「项目工作目录」进行全量环境克隆与精准注入
-        run: |
-          # 定义可能存在的两个核心安卓 SDK 腹地
-          PATH_A="/home/runner/.buildozer/android/platform/android-sdk"
-          PATH_B="${{ github.workspace }}/.buildozer/android/platform/android-sdk"
+          # 1. 强行创建一个干净的全局安卓 SDK 母目录，防止路径乱跑
+          mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
           
-          # 循环对这两个路径同时进行毁灭性的全量装载，确保万无一失
-          for TARGET_SDK_DIR in "$PATH_A" "$PATH_B"; do
-              echo "[*] 正在向路径注入完整的核心组件: $TARGET_SDK_DIR"
-              mkdir -p $TARGET_SDK_DIR/cmdline-tools
-              
-              # 下载并解压最新最稳的官方命令行工具
-              cd $TARGET_SDK_DIR/cmdline-tools
-              wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-              unzip -q commandlinetools-linux-9477386_latest.zip
-              mv cmdline-tools latest
-              
-              # 自动注入并同意 Google 官方所有证书协议锁
-              mkdir -p $TARGET_SDK_DIR/licenses
-              echo -e "\n244d2d25b6ad2030201111976193d7b38577c9a7" > $TARGET_SDK_DIR/licenses/android-sdk-license
-              echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > $TARGET_SDK_DIR/licenses/android-sdk-preview-license
-              
-              # 装载 build-tools (内含 aidl) 和 platform 组件
-              $TARGET_SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$TARGET_SDK_DIR "build-tools;33.0.0" "platforms;android-33" "platform-tools"
-              
-              # 建立老旧的 tools/bin 快捷方式兼容
-              mkdir -p $TARGET_SDK_DIR/tools/bin
-              ln -s $TARGET_SDK_DIR/cmdline-tools/latest/bin/sdkmanager $TARGET_SDK_DIR/tools/bin/sdkmanager
-          done
+          # 2. 事先写入官方授权协议锁，防止编译时卡住
+          echo -e "\n244d2d25b6ad2030201111976193d7b38577c9a7" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+          echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+          
+          # 3. 赋予项目最高执行权限
+          chmod -R 777 .
+          
+          # 4. 直接呼叫官方引擎。Buildozer 会在纯净环境下全自动搞定剩下的事情
+          yes | buildozer -v android debug
 
-      - name: 8. 将 aidl 的绝对路径强行焊死在系统最高全局变量中
-        run: |
-          # 无论是哪里的 aidl，直接把它们的物理路径强行塞给 Linux 系统的最高指挥部
-          echo "/home/runner/.buildozer/android/platform/android-sdk/build-tools/33.0.0" >> $GITHUB_PATH
-          echo "${{ github.workspace }}/.buildozer/android/platform/android-sdk/build-tools
+      - name: 7. 完美上传打包好的 APK 产物
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VideoDownloader-APK
+          path: bin/*.apk
