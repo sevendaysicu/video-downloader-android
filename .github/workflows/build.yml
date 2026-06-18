@@ -3,7 +3,7 @@ on: [push, pull_request]
 
 jobs:
   build:
-    runs-on: ubuntu-22.04 # 锁定高兼容性系统
+    runs-on: ubuntu-22.04 
     steps:
       - name: 1. 拉取仓库代码
         uses: actions/checkout@v4
@@ -12,7 +12,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17' # 锁定稳定的 JDK 17
+          java-version: '17' 
 
       - name: 3. 配置 Python 环境
         uses: actions/setup-python@v5
@@ -22,11 +22,12 @@ jobs:
       - name: 4. 安装 Linux 系统底层打包依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y libffi-dev osspd libssl-dev textit build-essential ccache git zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libsqlite3-dev libreadline-dev tk-dev libgmp-dev libmpfr-dev libmpc-dev libasound2-dev
+          # 【已修正】剔除了错误的 textit，确保依赖一键安装通过
+          sudo apt-get install -y libffi-dev osspd libssl-dev build-essential ccache git zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libsqlite3-dev libreadline-dev tk-dev libgmp-dev libmpfr-dev libmpc-dev libasound2-dev
 
       - name: 5. 升级 pip 并配置核心打包库
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install --upgrade Cython==0.29.33 virtualenv buildozer
 
       - name: 6. 启动官方 Buildozer 引擎一键编译
