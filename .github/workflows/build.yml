@@ -25,24 +25,35 @@ jobs:
           sudo apt-get install -y build-essential ccache git zlib1g-dev libffi-dev libssl-dev libncurses5-dev libgdbm-dev libnss3-dev libsqlite3-dev libreadline-dev tk-dev libgmp-dev libmpfr-dev libmpc-dev libasound2-dev patchelf unzip
           sudo apt-get install -y lib32stdc++6 lib32z1
 
-      - name: 5. 预先注入官方 Android SDK 环境并做路径向下兼容 (软连接硬解 path 漏洞)
+      - name: 5. 预装 Android SDK 核心组件并进行老路径打通 (硬解 aidl 缺失漏洞)
         run: |
-          # 建立最新标准的工具目录
+          # 1. 下载并安装最新版 cmdline-tools
           mkdir -p /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools
           cd /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
           unzip -q commandlinetools-linux-9477386_latest.zip
           mv cmdline-tools latest
           
-          # 【核心修复】建立老旧古老的 tools/bin 路径，并用软链接将其映射到最新 sdkmanager 上，完美欺骗 Buildozer 的检测
+          # 2. 自动接受证书协议
+          mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
+          echo -e "\n244d2d25b6ad2030201111976193d7b38577c9a7" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+          echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+          
+          # 3. 强行呼叫官方 sdkmanager 下载官方最稳的 build-tools（里面包含 aidl）和 platforms
+          export SDKMANAGER="/home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager"
+          $SDKMANAGER --sdk_root=/home/runner/.buildozer/android/platform/android-sdk "build-tools;33.0.0" "platforms;android-33" "platform-tools"
+          
+          # 4. 【核心路径欺骗】欺骗老版 Buildozer 的老旧路径检测
+          # 欺骗 sdkmanager 路径
           mkdir -p /home/runner/.buildozer/android/platform/android-sdk/tools/bin
           ln -s /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
           
-          # 自动注入接受官方协议的证书锁
-          mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
-          echo -e "\n244d2d25b6ad2030201111976193d7b38577c9a7" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-
-      - name: 6. 升级并安装 2026 标准 Buildozer 环境
+          # 欺骗 aidl / build-tools 路径
+          mkdir -p /home/runner/.buildozer/android/platform/android-sdk/build-tools/33.0.0/bin
+          # 把下载好的最新 aidl 软链接到老版 Buildozer 习惯去翻找的各种可能路径上
+          ln -s /home/runner/.buildozer/android/platform/android-sdk/build-tools/33.0.0/aidl /home/runner/.buildozer/android/platform/android-sdk/build-tools/33.0.0/bin/aidl
+          
+      - name: 6. 安装 2026 标准 Buildozer 环境
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade virtualenv buildozer sh Cython
@@ -50,7 +61,6 @@ jobs:
       - name: 7. 启动官方 Buildozer 引擎一键极速编译
         run: |
           chmod -R 777 .
-          # 用标准参数，跳过不稳定的自动更新
           buildozer -v android debug
 
       - name: 8. 完美上传打包好的 APK 产物
