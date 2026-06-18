@@ -3,18 +3,39 @@ on: [push, pull_request]
 
 jobs:
   build:
-    runs-on: ubuntu-22.04  # 保持稳定的 Ubuntu 环境
+    runs-on: ubuntu-22.04 # 锁定高兼容性系统
     steps:
-      - uses: actions/checkout@v4  # 保持 v4，防止过时警告
+      - name: 1. 拉取仓库代码
+        uses: actions/checkout@v4
 
-      - name: Get Buildozer Action
-        uses: ArtemSBulgakov/buildozer-action@v1  # 【已修正】完美回归官方支持的 v1 版本
+      - name: 2. 安装并配置 Java 环境 (Android 编译必备)
+        uses: actions/setup-java@v4
         with:
-          buildozer_version: stable
-          command: buildozer android debug
+          distribution: 'temurin'
+          java-version: '17' # 锁定稳定的 JDK 17
 
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4  # 保持 v4，彻底解决 v3 被 GitHub 禁用的问题
+      - name: 3. 配置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 4. 安装 Linux 系统底层打包依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libffi-dev osspd libssl-dev textit build-essential ccache git zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libsqlite3-dev libreadline-dev tk-dev libgmp-dev libmpfr-dev libmpc-dev libasound2-dev
+
+      - name: 5. 升级 pip 并配置核心打包库
+        run: |
+          pip install --upgrade pip
+          pip install --upgrade Cython==0.29.33 virtualenv buildozer
+
+      - name: 6. 启动官方 Buildozer 引擎一键编译
+        run: |
+          # 自动同意所有安卓 SDK 协议，防止编译时卡住暂停
+          yes | buildozer android debug
+
+      - name: 7. 完美上传打包好的 APK 产物
+        uses: actions/upload-artifact@v4
         with:
           name: VideoDownloader-APK
           path: bin/*.apk
