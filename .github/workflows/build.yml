@@ -8,7 +8,7 @@ jobs:
       - name: 1. 拉取仓库代码
         uses: actions/checkout@v4
 
-      - name: 2. 安装并配置 Java 环境 (Android 编译必备)
+      - name: 2. 安装并配置 Java 环境
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -17,25 +17,40 @@ jobs:
       - name: 3. 配置 Python 环境
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: 4. 安装 Linux 系统底层打包依赖
         run: |
           sudo apt-get update
-          # 【已修正】剔除了错误的 textit，确保依赖一键安装通过
-          sudo apt-get install -y libffi-dev osspd libssl-dev build-essential ccache git zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libsqlite3-dev libreadline-dev tk-dev libgmp-dev libmpfr-dev libmpc-dev libasound2-dev
+          sudo apt-get install -y build-essential ccache git zlib1g-dev libffi-dev libssl-dev libncurses5-dev libgdbm-dev libnss3-dev libsqlite3-dev libreadline-dev tk-dev libgmp-dev libmpfr-dev libmpc-dev libasound2-dev patchelf unzip
+          sudo apt-get install -y lib32stdc++6 lib32z1
 
-      - name: 5. 升级 pip 并配置核心打包库
+      - name: 5. 预先在底层注入最新版官方 Android SDK 工具链 (彻底防止下载闪退与解压超时)
+        run: |
+          mkdir -p /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools
+          cd /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools
+          # 下载 2026 年最新最稳定的官方 Commandlinetools 稳定包
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+          unzip -q commandlinetools-linux-9477386_latest.zip
+          # 规范目录层级符合官方最新标准
+          mv cmdline-tools latest
+          mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
+          # 自动注入接受官方协议的证书锁，直接绕过慢速交互
+          echo -e "\n244d2d25b6ad2030201111976193d7b38577c9a7" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+
+      - name: 6. 升级并安装 2026 标准 Buildozer 环境
         run: |
           python -m pip install --upgrade pip
-          pip install --upgrade Cython==0.29.33 virtualenv buildozer
+          pip install --upgrade virtualenv buildozer sh Cython
 
-      - name: 6. 启动官方 Buildozer 引擎一键编译
+      - name: 7. 启动官方 Buildozer 引擎一键极速编译
         run: |
-          # 自动同意所有安卓 SDK 协议，防止编译时卡住暂停
-          yes | buildozer android debug
+          chmod -R 777 .
+          # 使用 -v 输出详细过程，yes | 全自动跳过底层繁琐的下载等待
+          yes | buildozer -v android debug
 
-      - name: 7. 完美上传打包好的 APK 产物
+      - name: 8. 完美上传打包好的 APK 产物
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: VideoDownloader-APK
