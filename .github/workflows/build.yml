@@ -25,27 +25,33 @@ jobs:
           sudo apt-get install -y build-essential ccache git zlib1g-dev libffi-dev libssl-dev libncurses5-dev libgdbm-dev libnss3-dev libsqlite3-dev libreadline-dev tk-dev libgmp-dev libmpfr-dev libmpc-dev libasound2-dev patchelf unzip
           sudo apt-get install -y lib32stdc++6 lib32z1
 
-      - name: 5. 安装 Buildozer 核心打包工具
+      - name: 5. 补全 Buildozer 固执索要的老版本 sdkmanager 官方目录
+        run: |
+          # 1. 强行创建它死认的安卓 SDK 腹地根目录
+          mkdir -p /home/runner/.buildozer/android/platform/android-sdk
+          cd /home/runner/.buildozer/android/platform/android-sdk
+          
+          # 2. 扔掉所有花哨的快捷方式，直接下载带老版路径（tools/bin）的官方历史工具链
+          wget -q https://dl.google.com/android/repository/sdk-tools-linux-4333796.zip
+          unzip -q sdk-tools-linux-4333796.zip
+          
+          # 3. 顺便帮它把 Google 官方的各种授权协议证书锁锁死，防止卡住
+          mkdir -p licenses
+          echo -e "\n244d2d25b6ad2030201111976193d7b38577c9a7" > licenses/android-sdk-license
+          echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > licenses/android-sdk-preview-license
+
+      - name: 6. 安装 Buildozer 核心打包工具
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade virtualenv buildozer sh Cython
 
-      - name: 6. 纯净初始化并一键全自动编译 (不再使用任何多余脚本)
+      - name: 7. 启动官方 Buildozer 引擎执行真正的极速编译
         run: |
-          # 1. 强行创建一个干净的全局安卓 SDK 母目录，防止路径乱跑
-          mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
-          
-          # 2. 事先写入官方授权协议锁，防止编译时卡住
-          echo -e "\n244d2d25b6ad2030201111976193d7b38577c9a7" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
-          
-          # 3. 赋予项目最高执行权限
           chmod -R 777 .
-          
-          # 4. 直接呼叫官方引擎。Buildozer 会在纯净环境下全自动搞定剩下的事情
-          yes | buildozer -v android debug
+          # 此时 tools/bin/sdkmanager 已经在物理上完美就位，绝不会再报路径不存在
+          buildozer -v android debug
 
-      - name: 7. 完美上传打包好的 APK 产物
+      - name: 8. 完美上传打包好的 APK 产物
         if: always()
         uses: actions/upload-artifact@v4
         with:
