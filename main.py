@@ -14,6 +14,9 @@ from kivy.uix.button import Button
 from kivy.uix.scrollview import ScrollView
 from kivy.clock import Clock
 from kivy.utils import platform
+# 引入并注册全局中文字体
+from kivy.core.text import LabelBase, DEFAULT_FONT
+LabelBase.register(DEFAULT_FONT, 'font.ttf')  # 注意：这里的 'font.ttf' 要和上传的字体文件名完全一致
 
 # 网络库
 import requests
