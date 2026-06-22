@@ -49,13 +49,18 @@ jobs:
           find $SDK_DIR/build-tools/ -mindepth 2 -maxdepth 2 -exec cp -r {}/ $SDK_DIR/build-tools/ \; 2>/dev/null || true
           echo "$SDK_DIR/build-tools" >> $GITHUB_PATH
 
-      - name: 8. 启动轻量化全速打包 (去除了 -v，防止日志截断与崩溃)
+      - name: 8. 启动全速打包并配置智能报错捕获机制
         run: |
           chmod -R 777 .
-          # 不加 -v 保持静默极速打包，直接产出最终 APK
-          buildozer android debug
+          # 将日志重定向到文件，既能极速打包防截断，又能保留证据
+          buildozer android debug > buildozer_output.log 2>&1 || {
+            echo "------------------- ❌ 编译不幸崩溃！为您拦截并抓取核心底层报错 -------------------"
+            tail -n 150 buildozer_output.log
+            exit 1
+          }
 
       - name: 9. 完美上传打包好的 APK 产物
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: VideoDownloader-APK
