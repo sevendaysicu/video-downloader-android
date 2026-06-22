@@ -4,7 +4,7 @@ title = VideoDownloader
 package.name = videodownloader
 package.domain = org.rouvideo
 source.dir = .
-source.include_exts = py,png,jpg,json
+source.include_exts = py,png,jpg,json,ttf
 version = 1.0
 
 # 核心依赖（已精简，确保合包不卡死）
