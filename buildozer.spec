@@ -14,13 +14,17 @@ requirements = python3,kivy,requests,urllib3,certifi,charset_normalizer,idna
 orientation = portrait
 fullscreen = 0
 
-# 安卓系统最高权限声明（支持读写网络与公共存储目录）
+# 安卓系统最高权限声明
 android.permissions = INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE, MANAGE_EXTERNAL_STORAGE
 
-# 核心编译链框架（硬核修复：对齐 2026 年最新 Google NDK 编译标准）
+# 【终极锁定】强制对齐 NDK 最稳历史编译标准，拒绝不稳定的 r28c
 android.api = 33
 android.minapi = 21
 android.ndk_api = 24
+
+# 📢 【核心绝杀行】硬编码锁定最稳的 NDK 版本，不让 Buildozer 乱下最新版
+android.ndk = 25c
+
 android.archs = arm64-v8a, armeabi-v7a
 
 # 调试与构建模式限制
