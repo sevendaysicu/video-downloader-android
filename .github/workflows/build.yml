@@ -8,11 +8,11 @@ jobs:
       - name: 1. 拉取仓库代码
         uses: actions/checkout@v4
 
-      - name: 2. 安装并配置 Java 8 环境 (硬解 javax/xml 类缺失致命伤)
+      - name: 2. 安装并配置 Java 8 环境
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '8' # 【核心修复】降级到 JDK 8，完美兼容老版 sdkmanager
+          java-version: '8' 
 
       - name: 3. 配置 Python 环境
         uses: actions/setup-python@v5
@@ -25,7 +25,7 @@ jobs:
           sudo apt-get install -y build-essential ccache git zlib1g-dev libffi-dev libssl-dev libncurses5-dev libgdbm-dev libnss3-dev libsqlite3-dev libreadline-dev tk-dev libgmp-dev libmpfr-dev libmpc-dev libasound2-dev patchelf unzip
           sudo apt-get install -y lib32stdc++6 lib32z1
 
-      - name: 5. 补全 Buildozer 固执索要的老版本 sdkmanager 官方目录
+      - name: 5. 预装 Buildozer 固执索要的老版本 sdkmanager 官方目录
         run: |
           mkdir -p /home/runner/.buildozer/android/platform/android-sdk
           cd /home/runner/.buildozer/android/platform/android-sdk
@@ -44,13 +44,36 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade virtualenv buildozer sh Cython
 
-      - name: 7. 启动官方 Buildozer 引擎执行真正的极速编译
+      - name: 7. 诱骗 Buildozer 后台拉取全量组件，并进行物理路径强行并轨
+        run: |
+          # 1. 先呼叫一次编译，让已经活过来的 sdkmanager 在后台把该下载的 100% 下载完
+          buildozer android debug > /dev/null 2>&1 &
+          sleep 45
+          pkill -f buildozer || true
+          pkill -f python || true
+          
+          # 2. 【物理绝杀】既然它瞎，找不到下载好的组件，我们手动帮它把可能诞生 aidl 的目录全部互相同步复制！
+          SDK_DIR="/home/runner/.buildozer/android/platform/android-sdk"
+          
+          # 强行确保 build-tools 母目录存在
+          mkdir -p $SDK_DIR/build-tools
+          
+          # 如果后台下好了 33.0.0 的特定版本，直接把它里面的所有文件强行往母目录复制、往系统环境变量里塞
+          if [ -d "$SDK_DIR/build-tools/33.0.0" ]; then
+              cp -r $SDK_DIR/build-tools/33.0.0/* $SDK_DIR/build-tools/ || true
+          fi
+          
+          # 终极保险：把整个大路径直接塞给 Linux 最高指挥部
+          echo "$SDK_DIR/build-tools" >> $GITHUB_PATH
+          echo "$SDK_DIR/build-tools/33.0.0" >> $GITHUB_PATH
+
+      - name: 8. 启动官方 Buildozer 引擎执行真正的最终闭包编译
         run: |
           chmod -R 777 .
-          # 在 Java 8 的加持下，老版 sdkmanager 能够完美启动并全自动补全所有 build-tools(内含aidl)
+          # 此时不管它用 which aidl 还是直接翻找 build-tools 目录，真家伙全部直接怼在它脸上
           buildozer -v android debug
 
-      - name: 8. 完美上传打包好的 APK 产物
+      - name: 9. 完美上传打包好的 APK 产物
         if: always()
         uses: actions/upload-artifact@v4
         with:
