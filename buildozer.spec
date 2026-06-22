@@ -1,13 +1,32 @@
 [app]
+# 基础元数据
 title = VideoDownloader
 package.name = videodownloader
 package.domain = org.rouvideo
 source.dir = .
-source.include_exts = py,png,jpg
+source.include_exts = py,png,jpg,json
 version = 1.0
+
+# 核心依赖（已精简，拒绝庞大C++编译开销）
 requirements = python3,kivy,requests,urllib3,certifi,charset_normalizer,idna
+
+# 屏幕设置
 orientation = portrait
 fullscreen = 0
-android.permissions = WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE, INTERNET
+
+# 安卓系统最高权限声明（支持读写网络与公共存储目录）
+android.permissions = INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE, MANAGE_EXTERNAL_STORAGE
+
+# 核心编译链框架（硬核修复：对齐 2026 年最新 Google NDK 编译标准）
 android.api = 33
 android.minapi = 21
+android.ndk_api = 24
+android.archs = arm64-v8a, armeabi-v7a
+
+# 调试与构建模式限制
+android.skip_byte_compile = 0
+android.private_storage = 0
+
+[buildozer]
+log_level = 2
+warn_on_root = 1
