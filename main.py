@@ -3,7 +3,6 @@ import re
 import time
 import random
 import threading
-import traceback
 from urllib.parse import urlparse, parse_qs
 
 from kivy.app import App
@@ -50,7 +49,7 @@ class LoadingPopup(Popup):
 
 class VideoDownloaderAndroid(App):
     def build(self):
-        self.title = "视频打捞大师 熔断铠甲版"
+        self.title = "视频打捞大师 永不闪退版"
         self.base_url = ""
         self.params = {}
         self.save_dir = ""
@@ -62,10 +61,10 @@ class VideoDownloaderAndroid(App):
 
         layout = BoxLayout(orientation='vertical', padding=20, spacing=15)
         
-        layout.add_widget(Label(text="请粘贴完整的视频播放网址 或 Request URL:", size_hint_y=None, height=40))
+        layout.add_widget(Label(text="请粘贴播放网址 或 完整的切片请求URL:", size_hint_y=None, height=40))
         self.url_input = TextInput(
             multiline=True, 
-            hint_text="必须包含 http:// 或 https:// 开头...", 
+            hint_text="示例 1: https://rou.video/video/123\n示例 2: https://cdn.xxx.com/hls/CLS-001.jpg?v=6", 
             size_hint_y=None, 
             height=300
         )
@@ -99,9 +98,6 @@ class VideoDownloaderAndroid(App):
         
         return layout
 
-    # ==========================================
-    # 【核心修复1】显存防爆日志系统 (永远只保留最近40行)
-    # ==========================================
     @mainthread
     def log(self, message):
         lines = self.log_label.text.split('\n')
@@ -125,41 +121,53 @@ class VideoDownloaderAndroid(App):
                 
             self.log("\n" + "="*30)
             
-            # 【核心修复2】严格质检：残缺链接直接拦截
+            # 安全检查：必须含有 http 开头
             if not raw_url.startswith("http://") and not raw_url.startswith("https://"):
-                self.log("[❌ 致命错误] 链接不完整！")
-                self.log("请确保复制的链接是以 http:// 或 https:// 开头的【完整网址】。残缺地址无法打捞！")
+                self.log("[❌ 阻断] 链接格式不合法！")
+                self.log("必须包含完整的 http:// 或 https:// 开头。")
                 return
             
+            # 判断是否包含完整的域名
+            parsed = urlparse(raw_url)
+            if not parsed.netloc or '.' not in parsed.netloc:
+                self.log("[❌ 阻断] 检测到残缺网址！")
+                self.log("网址中缺少有效的服务器域名部分，请重新复制完整的 Request URL。")
+                return
+
             self.log("[*] 智能分析链路已启动...")
+            
+            # 如果本身就是带有 CLS 切片特征的链接，直接进下载流
             if re.search(r'CLS-\d+\.jpg', raw_url):
                 self.start_download_flow(raw_url)
             else:
+                # 否则说明输入的是普通网页，启动后台嗅探
                 self.loading_popup = LoadingPopup()
                 self.loading_popup.open()
                 threading.Thread(target=self.async_web_parse, args=(raw_url,), daemon=True).start()
                 
         except Exception as e:
-            self.log(f"\n[主控崩溃]: {str(e)}")
+            self.log(f"\n[主控异常]: {str(e)}")
 
     def async_web_parse(self, page_url):
         ydl_opts = {'quiet': True, 'no_warnings': True, 'format': 'best', 'nocheckcertificate': True}
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info_dict = ydl.extract_info(page_url, download=False)
-                real_video_url = info_dict.get('url', None)
+                # 【核心加固】使用 .get() 且提供默认值，坚决防止 KeyError
+                real_video_url = info_dict.get('url', None) if info_dict else None
+                
                 if real_video_url:
                     Clock.schedule_once(lambda dt: self.on_parse_success(real_video_url))
                 else:
-                    Clock.schedule_once(lambda dt: self.on_parse_error("[错误] 未能提取到底层切片链接。"))
+                    Clock.schedule_once(lambda dt: self.on_parse_error("[提示] 该网页有强加密混淆，无法自动嗅探。请使用抓包工具获取完整的 CLS-xxx.jpg 请求地址直接粘贴进来下载。"))
         except Exception as e:
-            Clock.schedule_once(lambda dt: self.on_parse_error(f"[解析异常] {str(e)}"))
+            Clock.schedule_once(lambda dt: self.on_parse_error(f"[解析限制] 该网站限制了自动化工具抓包。\n建议：请使用黄鸟抓取包含“CLS-xxx.jpg”的完整长链接贴进来。"))
 
     def on_parse_success(self, real_url):
         if hasattr(self, 'loading_popup'):
             self.loading_popup.close_animation()
         self.url_input.text = real_url
-        self.log("[✔] 网页嗅探成功！即将并轨下载...")
+        self.log("[✔] 网页嗅探成功！即将开始打捞...")
         self.start_download_flow(real_url)
 
     def on_parse_error(self, error_msg):
@@ -199,10 +207,10 @@ class VideoDownloaderAndroid(App):
                 self.save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"slices_{video_id}")
                 
             os.makedirs(self.save_dir, exist_ok=True)
-            self.update_info(f"【环境就绪】域名: {parsed_url.netloc}\n保存至: {self.save_dir}")
+            self.update_info(f"【环境就绪】服务器: {parsed_url.netloc}\n目录: {self.save_dir}")
             return True
         except Exception as e:
-            self.log(f"[特征验证失败] {str(e)}")
+            self.log(f"[特征解析失败] {str(e)}")
             return False
 
     def create_session(self):
@@ -237,7 +245,6 @@ class VideoDownloaderAndroid(App):
             else:
                 return "ERROR"
         except Exception as e:
-            self.log(f"[异常] {str(e)[:40]}...") # 截断异常信息，防止单条过长
             return "ERROR"
         finally:
             if 'session' in locals():
@@ -245,8 +252,8 @@ class VideoDownloaderAndroid(App):
 
     def download_logic(self):
         try:
-            self.log("[*] 高并发下载流水线启动...")
-            error_count = 0 # 【核心修复3】网络错误计数器
+            self.log("[*] 下载流水线已接通...")
+            error_count = 0
             
             for idx in range(1, 600):
                 if not self.is_downloading:
@@ -255,55 +262,54 @@ class VideoDownloaderAndroid(App):
                 
                 if res == "EOF":
                     if self.download_worker(idx + 1) == "EOF":
-                        self.log(f"\n[✔] 捕获尾部信号，切片下载完毕！")
+                        self.log(f"\n[✔] 侦测到尾部边界，打捞完毕！")
                         break
                 elif res == "SUCCESS":
-                    self.log(f"[+] 固化: CLS-{idx:03d}.bin")
-                    error_count = 0 # 成功则重置计数
+                    self.log(f"[+] 下载完成: CLS-{idx:03d}.bin")
+                    error_count = 0
                 elif res == "EXISTS":
-                    self.log(f"[-] 跳过重复: CLS-{idx:03d}.bin")
+                    self.log(f"[-] 跳过已存在: CLS-{idx:03d}.bin")
                     error_count = 0
                 elif res == "ERROR":
                     error_count += 1
-                    # 连续失败 5 次直接拉闸！
                     if error_count >= 5:
-                        self.log("\n[🚫 熔断阻断] 连续5次网络请求失败，强制终止打捞！请检查链接有效性或网络状态。")
+                        self.log("\n[🚫 熔断] 连续5次请求无响应，已自动阻断防护。")
                         break
                         
-            self.log("\n[✔] 本次任务挂起。请点击【合并视频】。")
+            self.log("\n[✔] 任务结束。请点击【合并视频】生成MP4。")
         except Exception as e:
-            self.log(f"\n[致命崩溃]: {str(e)[:100]}")
+            self.log(f"\n[运行异常]: {str(e)[:50]}")
         finally:
             self.is_downloading = False
             Clock.schedule_once(lambda dt: setattr(self.main_btn, 'disabled', False))
 
     def merge_slices(self, instance):
         if not self.save_dir or not os.path.exists(self.save_dir):
-            self.log("[错误] 没有可合并的文件。")
+            self.log("[错误] 找不到可合并的数据目录。")
             return
         files = [f for f in os.listdir(self.save_dir) if f.endswith(".bin")]
         files.sort()
         if not files:
-            self.log("[错误] 未侦测到数据块。")
+            self.log("[错误] 目录内没有检测到有效数据块。")
             return
             
         parent_dir = os.path.dirname(self.save_dir)
         video_name = os.path.basename(self.save_dir).replace("slices_", "video_")
         output_mp4 = os.path.join(parent_dir, f"{video_name}.mp4")
         
-        self.log(f"[*] 正在物理拼装 {len(files)} 个片段...")
+        self.log(f"[*] 正在组装 {len(files)} 个片段...")
         try:
             with open(output_mp4, "wb") as out_f:
                 for f in files:
                     with open(os.path.join(self.save_dir, f), "rb") as in_f:
                         out_f.write(in_f.read())
-            self.log(f"\n[✔] 拼装成功！保存在:\n{output_mp4}")
+            self.log(f"\n[✔] 视频生成成功！保存在:\n{output_mp4}")
         except Exception as e:
-            self.log(f"[合并崩溃] {str(e)}")
+            self.log(f"[合并失败] {str(e)}")
 
     def open_directory(self, instance):
         if platform == 'android':
-            self.log("\n[提示] 文件保存在手机系统的【内部存储】->【Download】中。")
+            self.log("\n[提示] 文件已安全存入系统【内部存储】->【Download】文件夹。")
         else:
             if self.save_dir and os.path.exists(self.save_dir):
                 os.startfile(self.save_dir)
